@@ -1,0 +1,23 @@
+From b1b7252dbb80963351a63a31f38911081a42bdf3 Mon Sep 17 00:00:00 2001
+From: Rayun <nicolasj@mtu.edu>
+Date: Tue, 7 May 2024 17:13:49 -0400
+Subject: [PATCH] Fix for hanging when data received ends with "\n\r"
+
+---
+ pymochad/controller.py | 3 ++-
+ 1 file changed, 2 insertions(+), 1 deletion(-)
+
+diff --git a/pymochad/controller.py b/pymochad/controller.py
+index f52cc72..72d9f07 100644
+--- a/pymochad/controller.py
++++ b/pymochad/controller.py
+@@ -85,7 +85,8 @@ def read_data(self):
+                     break
+                 total_data.append(six.text_type(data.decode('utf8')))
+                 line_break = six.binary_type('\n'.encode('utf8'))
+-                if data.endswith(line_break):
++                alt_line_break = six.binary_type('\n\r'.encode('utf8'))
++                if data.endswith(line_break) or data.endswith(alt_line_break):
+                     break
+             except socket.error as e:
+                 if e.errno == socket.errno.EWOULDBLOCK:

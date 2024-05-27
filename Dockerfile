@@ -14,6 +14,9 @@ ENV \
 
 COPY root/etc/pip.conf /etc/
 
+# Patch pymochad's controller.py
+COPY root/patches/pymochad.patch /run/
+
 # install packages
 RUN \
   echo "**** install build packages ****" && \
@@ -217,13 +220,15 @@ RUN \
   for cleanfiles in *.pyc *.pyo; do \
     find /usr/local/lib/python3.*  -iname "${cleanfiles}" -exec rm -f '{}' + ; \
   done && \
+  echo "**** pymochad patch ****" && \
+    patch -p1 /usr/local/lib/python3.12/site-packages/pymochad/controller.py /run/pymochad.patch && \
   echo "**** cleanup ****" && \
   apk del --purge \
     build-dependencies && \
   rm -rf \
     /tmp/* \
     /root/.cache \
-    /root/.cargo
+    /root/.cargo 
 
 # environment settings. used so pip packages installed by home assistant installs in /config
 ENV HOME="/config"

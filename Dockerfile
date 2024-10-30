@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1
 
-FROM ghcr.io/linuxserver/baseimage-alpine:3.19
+FROM ghcr.io/linuxserver/baseimage-alpine:3.20
 
 # set version label
 ARG BUILD_DATE
@@ -10,7 +10,9 @@ LABEL build_version="Linuxserver.io version:- ${VERSION} Build-date:- ${BUILD_DA
 LABEL maintainer="saarg, roxedus"
 
 ENV \
-  S6_SERVICES_GRACETIME=240000
+  S6_SERVICES_GRACETIME=240000 \
+  UV_SYSTEM_PYTHON=true \
+  UV_EXTRA_INDEX_URL="https://wheels.home-assistant.io/musllinux-index/"
 
 COPY root/etc/pip.conf /etc/
 
@@ -103,8 +105,18 @@ RUN \
     | grep 'amd64: ' \
     | cut -d: -f3 \
     | sed 's|-alpine.*||') && \
-  HA_DOCKER_BASE=$(curl -sX GET https://api.github.com/repos/home-assistant/docker-base/releases/latest \
-      | jq -r .tag_name) && \
+  HASS_BASE_RELEASE=$(curl -sL https://api.github.com/repos/home-assistant/docker/releases) && \
+  HASS_BASE_TIME=$(date -d $(echo $HASS_BASE_RELEASE | \
+    jq -r ".[] | select(.tag_name | match(\"${HASS_BASE}\")) .published_at") +%s) && \
+  for i in 0 1 2 3 4 5 6; do \
+    HA_DOCKER_BASE_TIME=$(date -d $(curl -s "https://api.github.com/repos/home-assistant/docker-base/releases" | \
+      jq -r ".[${i}].published_at") +%s); \
+    if [ "${HASS_BASE_TIME}" -ge "${HA_DOCKER_BASE_TIME}" ]; then \
+      HA_DOCKER_BASE=$(curl -s "https://api.github.com/repos/home-assistant/docker-base/releases" | jq -r ".[${i}].tag_name"); \
+      echo "**** HA_DOCKER_BASE detected as version ${HA_DOCKER_BASE} ****"; \
+      break; \
+    fi; \
+  done && \
   git clone --branch "${HA_DOCKER_BASE}" \
     --depth 1 https://github.com/home-assistant/docker-base.git \
     /tmp/ha-docker-base && \
@@ -126,6 +138,7 @@ RUN \
   HA_PIP_VERSION=$(cat /tmp/ha-docker-base/python/${HA_PY_MAJOR}/build.yaml \
     | grep 'PIP_VERSION: ' \
     | sed 's|.*PIP_VERSION: ||') && \
+  HA_UV_VERSION=$(curl -fsL "https://raw.githubusercontent.com/home-assistant/core/refs/tags/${HASS_RELEASE}/Dockerfile" | grep 'install uv==' | sed 's|RUN pip3 install uv==||') && \
   echo "**** install jemalloc ****" && \
   git clone --branch ${HA_JEMALLOC_VER} \
     --depth 1 "https://github.com/jemalloc/jemalloc" \
@@ -137,7 +150,7 @@ RUN \
   make install_lib_shared install_bin && \
   echo "**** install python ****" && \
   PY_RELEASE_TAG=$(curl -s https://api.github.com/repos/linuxserver/docker-python/releases \
-    | jq -r "first(.[] | select(.tag_name | startswith(\"alpine319-${HA_PY_VERSION}\"))) | .tag_name") && \
+    | jq -r "first(.[] | select(.tag_name | startswith(\"alpine320-${HA_PY_VERSION}\"))) | .tag_name") && \
   if [ -n "${PY_RELEASE_TAG}" ]; then \
     echo "**** Installing python from the linuxserver python repo release ${PY_RELEASE_TAG} ****" && \
     curl -o \
@@ -204,31 +217,36 @@ RUN \
   fi && \
   echo "**** install homeassistant ****" && \
   cd /tmp/core && \
-  pip3 install --only-binary=:all: \
+  pip3 install uv==${HA_UV_VERSION} && \
+  uv pip install --no-build \
     -r https://raw.githubusercontent.com/home-assistant/docker/${HASS_BASE}/requirements.txt && \
-  pip3 install --only-binary=:all: \
+  uv pip install --no-build \
     -r requirements.txt && \
   PYCUPS_VER=$(grep "pycups" requirements_all.txt | sed 's|.*==||') && \
-  LD_PRELOAD="/usr/local/lib/libjemalloc.so.2" \
-    MALLOC_CONF="background_thread:true,metadata_thp:auto,dirty_decay_ms:20000,muzzy_decay_ms:20000" \
-    pip3 install --only-binary=:all: \
+  uv pip install --no-build \
       -r requirements_all.txt \
       isal \
       pycups==${PYCUPS_VER} && \
-  pip3 install \
+  uv pip install \
     homeassistant==${HASS_RELEASE} && \
   for cleanfiles in *.pyc *.pyo; do \
     find /usr/local/lib/python3.*  -iname "${cleanfiles}" -exec rm -f '{}' + ; \
   done && \
   echo "**** pymochad patch ****" && \
     patch -p1 /usr/local/lib/python3.12/site-packages/pymochad/controller.py /run/pymochad.patch && \
+  chown -R root:7310  /usr/local && \
+  chmod -R g+w /usr/local && \
+  groupadd lsio && \
+  groupmod -g 7310 lsio && \
+  mv /usr/local/lib/python3.12 /usr/local/lib/python3.12.bak && \
+  printf "Linuxserver.io version: ${VERSION}\nBuild-date: ${BUILD_DATE}" > /build_version && \
   echo "**** cleanup ****" && \
   apk del --purge \
     build-dependencies && \
   rm -rf \
     /tmp/* \
     /root/.cache \
-    /root/.cargo 
+    /root/.cargo
 
 # environment settings. used so pip packages installed by home assistant installs in /config
 ENV HOME="/config"

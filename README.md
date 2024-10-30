@@ -290,7 +290,8 @@ Below are the instructions for updating containers:
 
 ### Image Update Notifications - Diun (Docker Image Update Notifier)
 
-**tip**: We recommend [Diun](https://crazymax.dev/diun/) for update notifications. Other tools that automatically update containers unattended are not recommended or supported.
+>[!TIP]
+>We recommend [Diun](https://crazymax.dev/diun/) for update notifications. Other tools that automatically update containers unattended are not recommended or supported.
 
 ## Building locally
 
@@ -315,6 +316,9 @@ Once registered you can define the dockerfile to use with `-f Dockerfile.aarch64
 
 ## Versions
 
+* **12.10.24:** - Allow uv to modify system python packages.
+* **07.10.24:** - Switch to `uv` instead of `pip`.
+* **03.07.24:** - Rebase to alpine 3.20.
 * **05.03.24:** - Add mime.types to help with detection of certain media files.
 * **13.02.24:** - Rebase to alpine 3.19, upgrade to python 3.12. Restructure python packages so all packages are internal (no more venv in /config). Use upstream project's wheels. Due to an upstream issue, on first start of the newly updated container, some custom integrations may be disabled in HA due to missing dependencies. A subsequent container restart should fix that and the integrations should be re-enabled.
 * **18.12.23:** - Add Bluetooth instructions to readme.
